@@ -8,7 +8,7 @@ DOMAIN := gui/$(shell id -u)
 .PHONY: build test sample install uninstall restart status
 
 build:
-	go build -trimpath -ldflags "-s -w" -o $(BINARY) .
+	@if [ -f main.go ]; then go build -trimpath -ldflags "-s -w" -o $(BINARY) . ; else echo "using prebuilt $(BINARY)"; fi
 
 test:
 	go vet ./...

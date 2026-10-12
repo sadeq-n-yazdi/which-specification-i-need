@@ -1,0 +1,65 @@
+# HOWTO: collect memory data on your Mac and build a report
+
+macOS only (Apple Silicon or Intel). The logger needs no admin rights.
+
+## 1. Get the tool
+
+Either download a release bundle (`mac-performance-logger-<version>-darwin-arm64.tar.gz` for Apple Silicon,
+`...-darwin-amd64.tar.gz` for Intel) from the repository's Releases page and unpack it, or clone the repository and
+install [Go](https://go.dev/dl/) (version in `go.mod`).
+
+Put the folder somewhere permanent, for example `~/code/mac-performance-logger`: launchd points at it, so moving it
+later means running `make install` again.
+
+## 2. Configure
+
+```sh
+cp logger.conf.sample logger.conf
+vim logger.conf
+```
+
+- `start` / `stop`: local time, `YYYY-MM-DD HH:MM`. Choose about two weeks that include normal working days.
+- `interval`: `1m` is a good default (about 1 MB of logs per day).
+- `log_dir`: the `logs` folder inside this directory, for example `~/code/mac-performance-logger/logs`.
+- `top_processes`: how many of the largest applications to record per sample.
+
+## 3. Install and check
+
+```sh
+make sample    # prints one sample; confirms it works
+make install   # registers the background job; it also starts at every login
+make status    # state, pid and the last log lines
+```
+
+Work as usual, on battery and on AC. Close the lid whenever you normally would; sleep is recorded.
+
+Other commands: `make restart` after editing `logger.conf`, `make uninstall` to stop and remove the job.
+
+## 4. Build the report
+
+Needs [uv](https://docs.astral.sh/uv/). For PDFs also `pandoc` and `xelatex`.
+
+```sh
+uv run --with pandas --with matplotlib python report/make_charts.py
+uv run --with pandas --with matplotlib python report/make_report.py --no-pdf
+uv run --with pandas --with matplotlib python report/make_working_hours_report.py --no-pdf
+```
+
+Output goes to `report/` (all hours) and `report/working-hours/` (Mon-Fri 08:30-17:30). Drop `--no-pdf` to also
+build PDFs.
+
+Before sharing the result, edit the machine-specific parts: `APPLICATION_PURPOSES` in `report/make_report.py` and the
+working hours in `report/make_working_hours_report.py`. `REPORT_INSTRUCTIONS.md` describes the full method; you can
+give it to an assistant to write a report for your own situation.
+
+## 5. Privacy
+
+`logs/` contains application names, times and battery state. Review it before sending it to anyone. Nothing is
+uploaded anywhere by the logger.
+
+## Troubleshooting
+
+- `make status` says "not loaded": run `make install` again, then check `logs/logger.log`.
+- No files appear: `start` is probably in the future, or `stop` is in the past. Fix `logger.conf`, then `make restart`.
+- Samples missing for a period: see `gap` and `sleep` rows in `logs/events.csv`.
+- Root-owned processes (for example security agents) cannot be read and are not listed, but they count in system totals.

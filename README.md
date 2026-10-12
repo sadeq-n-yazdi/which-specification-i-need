@@ -57,3 +57,5 @@ Reports are written to `report/` and `report/working-hours/`. Drop `--no-pdf` to
 `xelatex`). The application descriptions in `report/make_report.py` (`APPLICATION_PURPOSES`) and the working hours in
 `report/make_working_hours_report.py` (Mon–Fri 08:30–17:30) are written for the original author's machine; adjust them
 before sharing results. The `logs/` files contain application names, so review them before sending them to anyone.
+
+See [HOWTO.md](HOWTO.md) for a step-by-step guide. Licensed under the [MIT License](LICENSE).

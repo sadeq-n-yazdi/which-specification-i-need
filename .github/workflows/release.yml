@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # The collector uses cgo with macOS frameworks, so it must be built on macOS.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Vet and test
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Build release bundles
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          for arch in arm64 amd64; do
+            name="mac-performance-logger-${VERSION}-darwin-${arch}"
+            mkdir -p "dist/${name}/bin" "dist/${name}/report"
+            GOOS=darwin GOARCH="${arch}" CGO_ENABLED=1 \
+              go build -trimpath -ldflags "-s -w" -o "dist/${name}/bin/mac-performance-logger" .
+            cp Makefile README.md HOWTO.md LICENSE REPORT_INSTRUCTIONS.md logger.conf.sample \
+              launchd.plist.template "dist/${name}/"
+            cp report/make_*.py "dist/${name}/report/"
+            tar -C dist -czf "dist/${name}.tar.gz" "${name}"
+          done
+          (cd dist && shasum -a 256 ./*.tar.gz > SHA256SUMS)
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/*.tar.gz dist/SHA256SUMS \
+            --title "${{ github.ref_name }}" --generate-notes
