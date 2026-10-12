@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>__LABEL__</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__BINARY__</string>
+		<string>-config</string>
+		<string>__CONFIG__</string>
+	</array>
+	<!-- Start at login; restart after a crash, but not after a normal exit at the stop time. -->
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<dict>
+		<key>SuccessfulExit</key>
+		<false/>
+	</dict>
+	<!-- Highest priority available to a per-user job: no timer coalescing, CPU or disk throttling, so samples keep
+	     their schedule under heavy load. A negative Nice value would need a root LaunchDaemon. -->
+	<key>ProcessType</key>
+	<string>Interactive</string>
+	<key>LowPriorityIO</key>
+	<false/>
+	<key>Nice</key>
+	<integer>0</integer>
+	<key>StandardErrorPath</key>
+	<string>__LOG_DIRECTORY__/logger.log</string>
+</dict>
+</plist>
