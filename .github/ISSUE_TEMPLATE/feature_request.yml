@@ -1,0 +1,53 @@
+name: Feature request
+description: Suggest a new metric, platform, report section or improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the situation, not only the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Which platforms does it concern?
+      multiple: true
+      options:
+        - macOS
+        - Linux
+        - Both
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Logger (collected data)
+        - Install and service setup
+        - Report scripts
+        - Documentation
+        - Release process
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to open a pull request for this.

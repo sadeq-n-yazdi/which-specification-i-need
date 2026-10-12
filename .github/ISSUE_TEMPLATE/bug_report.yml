@@ -1,0 +1,80 @@
+name: Bug report
+description: Something does not work as described in the README or HOWTO
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do not paste whole log files: they contain application names. A few rows
+        from `logs/events.csv` and `logs/logger.log` are usually enough.
+  - type: dropdown
+    id: operating-system
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (x86_64)
+        - Linux (arm64)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: system-version
+    attributes:
+      label: OS version
+      description: "`sw_vers` on macOS, `cat /etc/os-release` and `uname -r` on Linux."
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Logger version
+      description: Release tag (for example v0.2.0) or commit hash.
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: How was it installed?
+      options:
+        - Release bundle
+        - Built from source (make install)
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it go wrong?
+      options:
+        - Installing (make, launchd, systemd)
+        - Collecting samples (logger)
+        - Building the report (report scripts)
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. cp logger.conf.sample logger.conf
+        2. make install
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Relevant output
+      description: Error messages, `make status`, rows from `logs/events.csv` or `logs/logger.log`.
+      render: shell
