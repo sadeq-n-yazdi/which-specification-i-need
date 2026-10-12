@@ -1,12 +1,12 @@
 # mac-performance-logger configuration. Times are this laptop's local wall-clock time (YYYY-MM-DD HH:MM).
-# Before start the logger sleeps; after stop it exits and launchd will not restart it.
-start = 2026-09-25 21:55
-stop = 2026-10-09 21:55
+# EDIT start, stop and log_dir before running `make install`. After stop the logger exits and is not restarted.
+start = 2026-10-13 09:00
+stop = 2026-10-27 18:00
 
 # How often to sample (Go duration: 30s, 1m, 5m). 1m gives detail at about 1 MB of logs per day.
 interval = 1m
 
-# Where the daily system-YYYY-MM-DD.csv and processes-YYYY-MM-DD.csv files go.
+# Where the daily CSV files go. Must be the logs folder of this directory.
 log_dir = ~/code/mac-performance-logger/logs
 
 # How many of the largest applications (grouped by name) to record per sample. 0 disables it.

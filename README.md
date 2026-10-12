@@ -39,7 +39,7 @@ If the column layout of a file changes (after an upgrade), the existing file for
 Needs macOS, [Go](https://go.dev/dl/) (version in `go.mod`) and [uv](https://docs.astral.sh/uv/) for the reports.
 
 1. Unpack the folder somewhere permanent (launchd points at it), e.g. `~/code/mac-performance-logger`.
-2. Edit `logger.conf`: set `start` and `stop` (local time, about two weeks apart) and make `log_dir` point at the
+2. Copy `logger.conf.sample` to `logger.conf` and edit it: set `start` and `stop` (local time, about two weeks apart) and make `log_dir` point at the
    `logs` folder inside this directory.
 3. Run `make sample` (one sample is printed), then `make install` and `make status`.
 4. Work normally on battery and on AC. The logger stops itself at `stop`. Use `make restart` after editing the

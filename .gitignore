@@ -32,3 +32,6 @@ __pycache__/
 *.swp
 *.swo
 *~
+
+# Personal settings (copy logger.conf.sample to logger.conf)
+logger.conf
