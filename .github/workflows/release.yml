@@ -24,6 +24,9 @@ jobs:
           go vet ./...
           go test ./...
 
+      - name: Check report scripts compile
+        run: python3 -m py_compile report/make_charts.py report/make_report.py report/make_working_hours_report.py
+
       - name: Build release bundles
         env:
           VERSION: ${{ github.ref_name }}
@@ -39,6 +42,13 @@ jobs:
             cp report/make_*.py "dist/${name}/report/"
             tar -C dist -czf "dist/${name}.tar.gz" "${name}"
           done
+
+      - name: Smoke test the bundle for this runner (make sample from the unpacked bundle, no Go source)
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          mkdir smoke && tar -C smoke -xzf "dist/mac-performance-logger-${VERSION}-darwin-arm64.tar.gz"
+          make -C "smoke/mac-performance-logger-${VERSION}-darwin-arm64" sample
 
       - uses: actions/upload-artifact@v4
         with:
@@ -60,6 +70,9 @@ jobs:
           go vet ./...
           go test ./...
 
+      - name: Check report scripts compile
+        run: python3 -m py_compile report/make_charts.py report/make_report.py report/make_working_hours_report.py
+
       - name: Build release bundles
         env:
           VERSION: ${{ github.ref_name }}
@@ -75,6 +88,13 @@ jobs:
             cp report/make_*.py "dist/${name}/report/"
             tar -C dist -czf "dist/${name}.tar.gz" "${name}"
           done
+
+      - name: Smoke test the bundle for this runner (make sample from the unpacked bundle, no Go source)
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          mkdir smoke && tar -C smoke -xzf "dist/mac-performance-logger-${VERSION}-linux-amd64.tar.gz"
+          make -C "smoke/mac-performance-logger-${VERSION}-linux-amd64" sample
 
       - uses: actions/upload-artifact@v4
         with:

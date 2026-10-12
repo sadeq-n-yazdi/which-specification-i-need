@@ -580,7 +580,7 @@ def build_report(statistics: dict, machine: dict, page_size: int) -> None:
         f"**{percent(ssd['since_boot_swap_share_of_disk_writes_percent'])}** of everything written to the disk since boot "
         "(all hours, not only working hours; the two readings differ by the minutes between the last sample and now)."
     )
-    markdown = f"""# Memory and SSD usage during working hours — MacBook Pro ({machine["chip"].replace("Apple ", "")}, {physical_gb} GB)
+    markdown = f"""# Memory and SSD usage during working hours — {machine["title"]} ({machine["chip_short"]}, {physical_gb} GB)
 
 *Only {WINDOW_TEXT} (local time) is analysed: {len(days)} working days, {statistics["samples"]:,} one-minute samples.
 Evenings, nights and weekends are excluded.*
@@ -589,7 +589,7 @@ Evenings, nights and weekends are excluded.*
 
 - **Period:** {day_range} ({len(days)} working days); {statistics["samples"]:,} samples = {percent(statistics["awake_coverage_percent"])} of the awake
   time in the window. {len(boot_periods) - 1} reboot(s) happened during these days.
-- **Memory pressure:** macOS reported **warning** in **{percent(pressure.get("warning", 0))}** and “normal” in only
+- **Memory pressure:** {machine["pressure_source"]} reported **warning** in **{percent(pressure.get("warning", 0))}** and “normal” in only
   {percent(pressure.get("normal", 0))} of working-hour samples.
 - **Swap:** median **{gigabytes(swap["median"])}** on the SSD (95th percentile {gigabytes(swap["p95"])}), against
   {physical_gb} GB installed RAM; median **{gigabytes(traffic["median"])}/min** moved between RAM and SSD.
@@ -604,13 +604,13 @@ Evenings, nights and weekends are excluded.*
 
 | | |
 |---|---|
-| Model | {machine["model"]} ({machine["chip"]}), {physical_gb} GB RAM, macOS {machine["macos"]} |
-| Tool | `mac-performance-logger`, reads macOS kernel memory counters once per minute (about 4 MB RAM, negligible CPU) |
+| Model | {machine["model"]} ({machine["chip"]}), {physical_gb} GB RAM, {machine["operating_system"]} |
+| Tool | `mac-performance-logger`, reads {machine["kernel_name"]} kernel memory counters once per minute (about 4 MB RAM, negligible CPU) |
 | Window | {WINDOW_TEXT}, 08:30 included, 17:30 excluded; 540 expected samples per day |
 | Counters | swap in/out are pages per interval × {page_size} bytes; rates divide by the real time since the previous sample |
 
-“Memory pressure” is macOS's own assessment (the colour in Activity Monitor). “Swap” is memory that macOS has moved from
-RAM to the SSD because RAM is full.
+{machine["pressure_note"]} “Swap” is memory that {machine["swap_owner"]} has moved from
+RAM to the disk because RAM is full.
 
 ## Findings
 
@@ -654,9 +654,9 @@ Compressed data and swap partly overlap, so the true need lies between the two. 
 
 ![Estimated demand per day](charts/memory_demand_by_day.png)
 
-## SSD usage caused by swap, and what it means for the laptop's lifetime
+## SSD usage caused by swap, and what it means for the {machine["noun"]}'s lifetime
 
-The SSD is soldered to the logic board and cannot be replaced, so its write endurance limits the life of the machine.
+{machine["storage_note"]}
 Flash memory wears with every byte **written**; reads (swap-ins) do not wear it. Swap-outs are writes.
 
 ![Swap written per day](charts/swap_written_per_day.png)
@@ -676,7 +676,7 @@ Flash memory wears with every byte **written**; reads (swap-ins) do not wear it.
 
 ### Effect on lifetime
 
-The logs measure how much is written; they **cannot** tell how much the SSD can take. Apple does not publish an endurance
+The logs measure how much is written; they **cannot** tell how much the SSD can take. {machine["vendor"]} does not publish an endurance
 rating (TBW) for this SSD, and the real wear indicator (“Percentage Used” in the drive's SMART data) is not read by the
 logger. Two facts limit what can be concluded:
 
@@ -695,7 +695,7 @@ once it is known; no rating is assumed.
 
 How to read it: at the measured rates the swap alone writes the amounts in the “per year” column; the shorter the “years to
 consume 100 TB” figure, the faster the drive would reach a given rating. To replace the estimate with a measurement, read the SSD's own “Percentage Used” and “Data Units
-Written” values (SMART, e.g. `smartctl -a` from smartmontools, not installed on this laptop) now and again in a few
+Written” values (SMART, e.g. `smartctl -a` from smartmontools) now and again in a few
 months.
 
 ## Workload
@@ -723,7 +723,7 @@ Power: {power_text}. The problem is not tied to one power state.
 
 Memory need depends on the workload, not the job title: how many containers run locally, whether an IDE, browser testing
 and several AI assistants run in parallel, and how many projects are open. This report makes no claim about other
-machines. The same logger can be run on a colleague's laptop for the same period for a like-for-like comparison.
+machines. The same logger can be run on a colleague's {machine["noun"]} for the same period for a like-for-like comparison.
 
 ## Cost of the problem
 
@@ -769,8 +769,8 @@ cd ~/code/mac-performance-logger
 uv run --with pandas --with matplotlib python report/make_working_hours_report.py
 ```
 
-Inputs: `logs/system-*.csv`, `logs/processes-*.csv`, `logs/events.csv`; live commands: `sysctl hw.pagesize`, `sysctl hw.model`,
-`sw_vers`, `ioreg -c IOBlockStorageDriver`. Outputs: `report/working-hours/`. Generated {datetime.now():%Y-%m-%d %H:%M}.
+Inputs: `logs/system-*.csv`, `logs/processes-*.csv`, `logs/events.csv`; live sources: the page size of this machine and
+{machine["live_sources"]}. Outputs: `report/working-hours/`. Generated {datetime.now():%Y-%m-%d %H:%M}.
 """
     (OUTPUT_DIRECTORY / "memory-report-working-hours.md").write_text(markdown)
 

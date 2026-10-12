@@ -24,7 +24,7 @@ make uninstall   # stop and remove the launchd job
   sample** (empty on the first row).
 - `processes-YYYY-MM-DD.csv` — top N applications by physical footprint, grouped by process name.
 - `events.csv` — the logger's own lifecycle: `start`, `stop` (with reason), `gap` (no samples for more than two
-  intervals), `sleep` (sleep and wake time and duration), `last_sleep_before_start`, `power` (plugged in/unplugged)
+  intervals), `sleep` (macOS only: sleep and wake time and duration), `last_sleep_before_start` (macOS only), `power` (plugged in/unplugged)
   and `error`, each with pid, system boot time and uptime. A changed boot time means
   the laptop was rebooted in between.
 - `logger.log` — the same messages as plain text, plus anything printed before the log directory exists.
@@ -36,7 +36,7 @@ If the column layout of a file changes (after an upgrade), the existing file for
 
 ## Quick start for a new machine
 
-Needs macOS, [Go](https://go.dev/dl/) (version in `go.mod`) and [uv](https://docs.astral.sh/uv/) for the reports.
+Needs macOS or Linux, GNU `make`, [Go](https://go.dev/dl/) (version in `go.mod`; not needed for a release bundle) and [uv](https://docs.astral.sh/uv/) for the reports.
 
 1. Unpack the folder somewhere permanent (launchd or systemd points at it), e.g. `~/code/mac-performance-logger`.
 2. Copy `logger.conf.sample` to `logger.conf` and edit it: set `start` and `stop` (local time, about two weeks apart) and make `log_dir` point at the
@@ -54,7 +54,10 @@ uv run --with pandas --with matplotlib python report/make_working_hours_report.p
 ```
 
 Reports are written to `report/` and `report/working-hours/`. Drop `--no-pdf` to also build PDFs (needs `pandoc` and
-`xelatex`). The application descriptions in `report/make_report.py` (`APPLICATION_PURPOSES`) and the working hours in
+`xelatex`). The scripts detect the operating system (macOS or Linux) and word the machine details and the memory-pressure
+explanation accordingly. They use the page size of the machine they run on; set `LOGGER_PAGE_SIZE_BYTES=16384` (or
+4096) if the logs come from another machine. The application descriptions in `report/make_report.py`
+(`APPLICATION_PURPOSES`), the fixed texts about the author's own measurements and the working hours in
 `report/make_working_hours_report.py` (Mon–Fri 08:30–17:30) are written for the original author's machine; adjust them
 before sharing results. The `logs/` files contain application names, so review them before sending them to anyone.
 
@@ -86,3 +89,10 @@ The CSV columns are the same as on macOS, filled from these sources:
 There are no `sleep` events on Linux (the kernel keeps no readable sleep time); a suspended laptop shows up as a `gap`
 event. The report scripts were written for macOS data; they read the Linux files, but compare the columns above before
 drawing conclusions across the two systems.
+
+## Makefile targets
+
+`make` picks the macOS (launchd) or Linux (systemd) variant from `uname`; on any other system `install`, `uninstall`,
+`restart` and `status` stop with an "unsupported operating system" message. `make install` refuses to run when
+`logger.conf` is missing, and `make build` tells you when Go is not installed or, in a release bundle, uses the
+prebuilt binary in `bin/`. Tested with GNU make 3.81 (macOS) and 4.3 (Debian 12).

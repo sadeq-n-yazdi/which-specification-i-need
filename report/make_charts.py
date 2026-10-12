@@ -7,7 +7,8 @@ Writes report/charts/*.png and report/statistics.json; reads nothing outside log
 import argparse
 import glob
 import json
-import subprocess
+import os
+import resource
 from pathlib import Path
 
 import matplotlib
@@ -25,17 +26,18 @@ PRESSURE_COLORS = {"normal": "#4caf50", "warning": "#f5b800", "critical": "#e539
 WORK_START_HOUR, WORK_END_HOUR = 9, 19
 SOURCE_NOTE = "Source: mac-performance-logger, logs/system-*.csv"
 CATEGORIES = [
-    ("Browser", ("Google Chrome", "Safari", "firefox", "Arc")),
-    ("Containers / VM", ("com.apple.Virtualization", "limactl", "qemu", "docker", "Rancher")),
-    ("IDE / editor", ("pycharm", "PyCharm", "Code", "idea", "vim")),
+    ("Browser", ("Google Chrome", "chrome", "chromium", "Safari", "firefox", "Arc", "brave")),
+    ("Containers / VM", ("com.apple.Virtualization", "limactl", "qemu", "docker", "containerd", "Rancher", "podman")),
+    ("IDE / editor", ("pycharm", "PyCharm", "Code", "idea", "vim", "java")),
     ("AI tools", ("claude", "node")),
-    ("Terminal / shell", ("iTerm", "Terminal", "zsh", "fish", "tmux")),
-    ("Database", ("postgres",)),
+    ("Terminal / shell", ("iTerm", "Terminal", "zsh", "fish", "tmux", "bash", "konsole")),
+    ("Database", ("postgres", "mysqld", "mariadbd", "redis", "mongod")),
 ]
 
 
 def page_size_bytes() -> int:
-    return int(subprocess.run(["sysctl", "-n", "hw.pagesize"], capture_output=True, text=True, check=True).stdout)
+    """Page size of this machine; set LOGGER_PAGE_SIZE_BYTES when the logs come from a machine with another one."""
+    return int(os.environ.get("LOGGER_PAGE_SIZE_BYTES") or resource.getpagesize())
 
 
 def read_logs(prefix: str) -> pd.DataFrame:

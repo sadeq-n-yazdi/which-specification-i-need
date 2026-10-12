@@ -6,6 +6,7 @@ Every number in the report comes from statistics.json or from the live system co
 
 import argparse
 import json
+import platform
 import re
 import subprocess
 from datetime import datetime
@@ -31,19 +32,98 @@ def command_output(*command: str) -> str:
     return subprocess.run(command, capture_output=True, text=True, check=True).stdout.strip()
 
 
-def machine_facts() -> dict:
+def read_text(path: str) -> str:
+    try:
+        return Path(path).read_text().strip()
+    except OSError:
+        return ""
+
+
+def linux_disk_written_bytes() -> int:
+    """Bytes written to all physical block devices since boot (512-byte sectors, 7th field of /sys/block/*/stat)."""
+    total = 0
+    for stat_file in Path("/sys/block").glob("*/stat"):
+        if re.match(r"(loop|ram|zram|dm-|md|sr|fd|nbd)", stat_file.parent.name):
+            continue
+        fields = read_text(str(stat_file)).split()
+        if len(fields) > 6:
+            total += int(fields[6]) * 512
+    return total
+
+
+def linux_machine_facts() -> dict:
+    os_release = dict(re.findall(r'^(\w+)="?([^"\n]*)"?$', read_text("/etc/os-release"), re.MULTILINE))
+    cpu = re.search(r"^(?:model name|Model)\s*:\s*(.+)$", read_text("/proc/cpuinfo"), re.MULTILINE)
+    boot_seconds = int(re.search(r"^btime (\d+)", read_text("/proc/stat"), re.MULTILINE).group(1))
+    model = read_text("/sys/class/dmi/id/product_name") or read_text("/proc/device-tree/model") or "Linux machine"
+    return {
+        "title": model,
+        "model": model,
+        "chip": cpu.group(1) if cpu else "unknown CPU",
+        "operating_system": f"{os_release.get('PRETTY_NAME', 'Linux')}, kernel {platform.release()}",
+        "kernel_name": "Linux",
+        "pressure_source": "The Linux kernel (pressure stall information)",
+        "pressure_note": "“Memory pressure” is derived from the kernel's pressure stall information "
+        "(`/proc/pressure/memory`): “warning” means processes stalled on memory for 10 % or more of the last 10 "
+        "seconds, “critical” means all non-idle processes stalled at the same time for 10 % or more. It is not the same "
+        "scale as the macOS level.",
+        "swap_owner": "The kernel",
+        "vendor": "The manufacturer",
+        "storage_note": "Flash memory has a limited write endurance. On many laptops the SSD is soldered and cannot be "
+        "replaced; on servers and desktops it can be.",
+        "noun": "machine",
+        "live_sources": "`/proc`, `/sys` and `/etc/os-release` (disk bytes written)",
+        "boot_time": datetime.fromtimestamp(boot_seconds),
+        "ssd_written_tb": linux_disk_written_bytes() / 1e12,
+    }
+
+
+def macos_machine_facts() -> dict:
     boot_seconds = int(re.search(r"sec = (\d+)", command_output("sysctl", "-n", "kern.boottime")).group(1))
     disk_statistics = command_output("ioreg", "-r", "-c", "IOBlockStorageDriver", "-w0")
     written_bytes = sum(int(value) for value in re.findall(r'"Bytes \(Write\)"=(\d+)', disk_statistics))
-    boot_time = datetime.fromtimestamp(boot_seconds)
+    model = command_output("sysctl", "-n", "hw.model")
     return {
-        "model": command_output("sysctl", "-n", "hw.model"),
+        "title": "MacBook Pro" if model.startswith("MacBookPro") else model,
+        "model": model,
         "chip": command_output("sysctl", "-n", "machdep.cpu.brand_string"),
-        "macos": f"{command_output('sw_vers', '-productVersion')} ({command_output('sw_vers', '-buildVersion')})",
-        "boot_time": boot_time,
-        "days_since_boot": (datetime.now() - boot_time).total_seconds() / 86400,
+        "operating_system": f"macOS {command_output('sw_vers', '-productVersion')} "
+        f"({command_output('sw_vers', '-buildVersion')})",
+        "kernel_name": "macOS",
+        "pressure_source": "macOS",
+        "pressure_note": "“Memory pressure” is macOS's own assessment (the colour in Activity Monitor's Memory tab).",
+        "swap_owner": "macOS",
+        "vendor": "Apple",
+        "storage_note": "The SSD is soldered to the logic board and cannot be replaced, so its write endurance limits "
+        "the life of the machine.",
+        "noun": "laptop",
+        "live_sources": "`sysctl`, `sw_vers` and `ioreg` (SSD bytes written)",
+        "boot_time": datetime.fromtimestamp(boot_seconds),
         "ssd_written_tb": written_bytes / 1e12,
     }
+
+
+def machine_facts() -> dict:
+    facts = macos_machine_facts() if platform.system() == "Darwin" else linux_machine_facts()
+    facts["chip_short"] = facts["chip"].replace("Apple ", "")
+    facts["days_since_boot"] = (datetime.now() - facts["boot_time"]).total_seconds() / 86400
+    return facts
+
+
+def compression_sentence(statistics: dict, machine: dict) -> str:
+    stored = statistics["compressor_stored_mb"]["median"]
+    occupied = statistics["compressor_occupied_mb"]["median"]
+    if machine["kernel_name"] == "Linux" and stored == 0:
+        return "No compressed memory was recorded (zram is not in use on this machine), so no CPU time went into it."
+    prefix = (
+        "macOS also compresses memory"
+        if machine["kernel_name"] == "macOS"
+        else "This machine also compresses memory (zram)"
+    )
+    return (
+        f"{prefix}: a median {gigabytes(stored)} of data was squeezed into {gigabytes(occupied)} of RAM, "
+        "which costs CPU time."
+    )
 
 
 def gigabytes(megabytes: float) -> str:
@@ -95,7 +175,7 @@ def worst_moment_summary(moments: list[dict]) -> str:
     )
 
 
-def cost_section(statistics: dict) -> str:
+def cost_section(statistics: dict, machine: dict) -> str:
     timing_rows = (
         "| Task | After reboot | Normal load | Difference |\n|---|---:|---:|---:|\n"
         "| `make test` | _tbd_ | _tbd_ | _tbd_ |\n| Docker build | _tbd_ | _tbd_ | _tbd_ |\n"
@@ -121,7 +201,7 @@ def cost_section(statistics: dict) -> str:
 
     thresholds = reboot["minutes_to_swap_over_mb"]
     normal_days = ", ".join(day_label(day) for day in reboot["normal_load_days"])
-    return f"""The laptop was rebooted on {timestamp_label(reboot["boot_time"])}. The {after["samples"]} samples since then
+    return f"""The {machine["noun"]} was rebooted on {timestamp_label(reboot["boot_time"])}. The {after["samples"]} samples since then
 ({hours:.1f} h) show how quickly a clean start fills up with the normal set of tools, compared with
 {normal["samples"]:,} working-hour samples before the reboot ({normal_days}). Source: `logs/system-*.csv`.
 
@@ -207,14 +287,14 @@ def build(statistics: dict, machine: dict) -> str:
         else ""
     )
 
-    return f"""# Memory usage report — MacBook Pro ({machine["chip"].replace("Apple ", "")}, {physical_gb} GB)
+    return f"""# Memory usage report — {machine["title"]} ({machine["chip_short"]}, {physical_gb} GB)
 
 {sample_banner}## Summary
 
 - **Period:** {period} ({statistics["hours_span"]:.0f} h, of which {statistics["hours_awake"]} h awake).
   {statistics["samples"]:,} one-minute samples = {percent(statistics["awake_coverage_percent"])} of the awake time.
   {reboot_text}
-- **Memory pressure:** macOS reported **warning** in **{percent(working_pressure.get("warning", 0))}** of working-hour
+- **Memory pressure:** {machine["pressure_source"]} reported **warning** in **{percent(working_pressure.get("warning", 0))}** of working-hour
   samples and {percent(statistics["pressure_percent_all"].get("warning", 0))} of all samples; “normal” in only
   {percent(working_pressure.get("normal", 0))} of working time.
 - **Swap:** during working hours a median **{gigabytes(swap_working["median"])}** of memory was held on the SSD
@@ -229,14 +309,14 @@ def build(statistics: dict, machine: dict) -> str:
 
 | | |
 |---|---|
-| Model | {machine["model"]} ({machine["chip"]}), {physical_gb} GB RAM, macOS {machine["macos"]} |
-| Tool | `mac-performance-logger`, reads the macOS kernel memory counters once per minute |
+| Model | {machine["model"]} ({machine["chip"]}), {physical_gb} GB RAM, {machine["operating_system"]} |
+| Tool | `mac-performance-logger`, reads the {machine["kernel_name"]} kernel memory counters once per minute |
 | Logger's own cost | about 4 MB RAM, less than 0.1 % CPU, about 1 MB log data per day |
 | Data | `logs/system-*.csv`, `logs/processes-*.csv`, `logs/events.csv` |
 | Working hours | Mon–Fri 09:00–19:00: {statistics["working_samples"]:,} samples on {working_day_text} |
 
-“Memory pressure” is macOS's own assessment (the colour in Activity Monitor's Memory tab). “Swap” is memory that
-macOS has moved from RAM to the SSD because RAM is full; reading it back is far slower than RAM.
+{machine["pressure_note"]} “Swap” is memory that
+{machine["swap_owner"]} has moved from RAM to the disk because RAM is full; reading it back is far slower than RAM.
 
 ## Findings
 
@@ -277,8 +357,7 @@ has to be brought back first. Heavy, continuous writing also wears the SSD, whic
 
 ![Memory demand](charts/memory_demand.png)
 
-macOS also compresses memory: a median {gigabytes(statistics["compressor_stored_mb"]["median"])} of data was
-squeezed into {gigabytes(statistics["compressor_occupied_mb"]["median"])} of RAM, which costs CPU time.
+{compression_sentence(statistics, machine)}
 
 | Estimate (working hours) | Median | 95th percentile | Max |
 |---|---:|---:|---:|
@@ -305,11 +384,11 @@ Per category (median, 95th percentile): {category_text}.
 Memory need depends on the workload, not the job title: how many containers run locally, whether an IDE, browser
 testing and several AI assistants are used in parallel, and how many projects are open at once. This report does not
 claim anything about other machines. For a like-for-like comparison the same logger can be run on a colleague's
-laptop for the same period; it needs no admin rights and has no noticeable cost.
+{machine["noun"]} for the same period; it needs no admin rights and has no noticeable cost.
 
 ## Cost of the problem
 
-{cost_section(statistics)}
+{cost_section(statistics, machine)}
 
 ## Recommendation
 
@@ -320,11 +399,11 @@ workload; {covering_gb} GB** also covers the upper estimate ({gigabytes(upper["p
 ## Data quality
 
 - Coverage: {statistics["samples"]:,} samples = {percent(statistics["awake_coverage_percent"])} of the
-  {statistics["hours_awake"]} awake hours; {statistics["hours_not_sampled"]} hours without samples while the laptop
+  {statistics["hours_awake"]} awake hours; {statistics["hours_not_sampled"]} hours without samples while the {machine["noun"]}
   was asleep or shut down ({statistics["sleep_count"]} sleeps recorded since sleep logging was added on 26 Sep 17:05).
 - Logger events: {sum(event["event"] == "start" for event in statistics["events"])} starts,
   {stops} stops ({stop_text}),
-  {sum(event["event"] == "gap" for event in statistics["events"])} gaps in sampling (laptop asleep or shut down),
+  {sum(event["event"] == "gap" for event in statistics["events"])} gaps in sampling ({machine["noun"]} asleep or shut down),
   {sum(event["event"] == "error" for event in statistics["events"])} errors.
 - Power: {power_text}. The problem is not tied to one power state. Samples before 26 Sep 17:03 have no power data.
 - Limitations: root-owned processes (e.g. the security agent) are not in the application table but are included in
@@ -338,8 +417,7 @@ uv run --with pandas --with matplotlib python report/make_charts.py   # charts +
 uv run python report/make_report.py                                   # this report + PDF
 ```
 
-Generated {datetime.now():%Y-%m-%d %H:%M} from `report/statistics.json`, `sysctl`, `sw_vers` and `ioreg` (SSD bytes
-written).
+Generated {datetime.now():%Y-%m-%d %H:%M} from `report/statistics.json` and {machine["live_sources"]}.
 """
 
 

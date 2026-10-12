@@ -6,7 +6,8 @@ macOS (Apple Silicon or Intel) and Linux (x86_64 or arm64, kernel 4.20 or newer)
 
 Either download a release bundle (`mac-performance-logger-<version>-darwin-arm64.tar.gz` for Apple Silicon,
 `...-darwin-amd64.tar.gz` for Intel Macs, `...-linux-amd64.tar.gz` or `...-linux-arm64.tar.gz` for Linux) from the repository's Releases page and unpack it, or clone the repository and
-install [Go](https://go.dev/dl/) (version in `go.mod`).
+install [Go](https://go.dev/dl/) (version in `go.mod`). You also need GNU `make`; on Linux with systemd the service
+is installed for your user (`systemctl --user`), without root.
 
 Put the folder somewhere permanent, for example `~/code/mac-performance-logger`: launchd points at it, so moving it
 later means running `make install` again.
@@ -47,8 +48,11 @@ uv run --with pandas --with matplotlib python report/make_report.py --no-pdf
 uv run --with pandas --with matplotlib python report/make_working_hours_report.py --no-pdf
 ```
 
-Output goes to `report/` (all hours) and `report/working-hours/` (Mon-Fri 08:30-17:30). Drop `--no-pdf` to also
+The scripts detect macOS or Linux and word the report accordingly. Output goes to `report/` (all hours) and `report/working-hours/` (Mon-Fri 08:30-17:30). Drop `--no-pdf` to also
 build PDFs.
+
+If the logs were recorded on a machine with a different page size (for example a Mac, 16384 bytes, analysed on an x86 Linux
+box, 4096 bytes), prefix the commands with `LOGGER_PAGE_SIZE_BYTES=16384`.
 
 Before sharing the result, edit the machine-specific parts: `APPLICATION_PURPOSES` in `report/make_report.py` and the
 working hours in `report/make_working_hours_report.py`. `REPORT_INSTRUCTIONS.md` describes the full method; you can
@@ -63,5 +67,8 @@ uploaded anywhere by the logger.
 
 - `make status` says "not loaded": run `make install` again, then check `logs/logger.log`.
 - No files appear: `start` is probably in the future, or `stop` is in the past. Fix `logger.conf`, then `make restart`.
-- Samples missing for a period: see `gap` and `sleep` rows in `logs/events.csv`.
+- `make install` says `logger.conf` is missing: run `cp logger.conf.sample logger.conf` first.
+- Linux without systemd (Alpine, containers, WSL1): run `bin/mac-performance-logger -config logger.conf` from your own init
+  system or `tmux`; `make install` stops with an explanation.
+- Samples missing for a period: see `gap` rows (and, on macOS, `sleep` rows) in `logs/events.csv`.
 - Root-owned processes (for example security agents) cannot be read and are not listed, but they count in system totals.
