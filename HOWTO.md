@@ -1,11 +1,11 @@
 # HOWTO: collect memory data on your Mac and build a report
 
-macOS only (Apple Silicon or Intel). The logger needs no admin rights.
+macOS (Apple Silicon or Intel) and Linux (x86_64 or arm64, kernel 4.20 or newer). The logger needs no admin rights.
 
 ## 1. Get the tool
 
 Either download a release bundle (`mac-performance-logger-<version>-darwin-arm64.tar.gz` for Apple Silicon,
-`...-darwin-amd64.tar.gz` for Intel) from the repository's Releases page and unpack it, or clone the repository and
+`...-darwin-amd64.tar.gz` for Intel Macs, `...-linux-amd64.tar.gz` or `...-linux-arm64.tar.gz` for Linux) from the repository's Releases page and unpack it, or clone the repository and
 install [Go](https://go.dev/dl/) (version in `go.mod`).
 
 Put the folder somewhere permanent, for example `~/code/mac-performance-logger`: launchd points at it, so moving it
@@ -27,11 +27,13 @@ vim logger.conf
 
 ```sh
 make sample    # prints one sample; confirms it works
-make install   # registers the background job; it also starts at every login
+make install   # registers the background job (launchd on macOS, systemd user service on Linux)
 make status    # state, pid and the last log lines
 ```
 
-Work as usual, on battery and on AC. Close the lid whenever you normally would; sleep is recorded.
+Work as usual, on battery and on AC. Close the lid whenever you normally would; on macOS sleep is recorded, on Linux it shows as a gap.
+
+On a Linux server also run `loginctl enable-linger $USER` once, so the service keeps running when you are logged out.
 
 Other commands: `make restart` after editing `logger.conf`, `make uninstall` to stop and remove the job.
 

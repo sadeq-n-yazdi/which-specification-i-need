@@ -1,0 +1,12 @@
+[Unit]
+Description=mac-performance-logger memory and swap sampler
+
+[Service]
+ExecStart=__BINARY__ -config __CONFIG__
+# Restart after a crash, but not after a normal exit at the stop time.
+Restart=on-failure
+RestartSec=5
+StandardError=append:__LOG_DIRECTORY__/logger.log
+
+[Install]
+WantedBy=default.target
