@@ -247,9 +247,16 @@ def build(statistics: dict, machine: dict) -> str:
     reboots = len(statistics["boot_times"]) - 1
     reboot_text = "No reboot during the period." if reboots == 0 else f"{reboots} reboot(s) during the period."
     stops = sum(event["event"] == "stop" for event in statistics["events"])
-    stop_text = (
-        f"{stops - reboots} logger upgrades, {reboots} shutdown(s) before a reboot" if reboots else "logger upgrades"
+    # "stop time reached" / "stop time already passed": the configured end of the measurement.
+    scheduled_stops = sum(
+        event["event"] == "stop" and str(event["details"]).startswith("stop time") for event in statistics["events"]
     )
+    stop_parts = [
+        (stops - scheduled_stops - reboots, "logger upgrades"),
+        (reboots, "shutdown(s) before a reboot"),
+        (scheduled_stops, "at the configured stop time"),
+    ]
+    stop_text = ", ".join(f"{count} {label}" for count, label in stop_parts if count > 0) or "none"
     # The SSD counter resets at boot, so a fresh boot says nothing about the measurement period.
     ssd_text = (
         f"The SSD has written **{machine['ssd_written_tb']:.1f} TB in the {machine['days_since_boot']:.1f} days since "

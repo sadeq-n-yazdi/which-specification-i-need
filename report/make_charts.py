@@ -100,10 +100,12 @@ def main() -> None:
     processes = read_logs("processes")
     events = pd.read_csv(LOG_DIRECTORY / "events.csv", parse_dates=["timestamp"])
     if arguments.start:
-        system, processes = (frame[frame["timestamp"] >= arguments.start] for frame in (system, processes))
+        system, processes, events = (
+            frame[frame["timestamp"] >= arguments.start] for frame in (system, processes, events)
+        )
     if arguments.end:
         end = pd.Timestamp(arguments.end) + pd.Timedelta(days=1)
-        system, processes = (frame[frame["timestamp"] < end] for frame in (system, processes))
+        system, processes, events = (frame[frame["timestamp"] < end] for frame in (system, processes, events))
 
     page_size = page_size_bytes()
     physical_mb = int(system["physical_mb"].iloc[-1])
@@ -213,7 +215,8 @@ def main() -> None:
         ]
         .to_dict(orient="records"),
         "sleep_count": len(sleeps),
-        "boot_times": sorted(events["boot_time"].unique().tolist()),
+        # A boot after the last sample (the logger started past its stop time) has no data to compare.
+        "boot_times": sorted(boot for boot in events["boot_time"].unique() if pd.Timestamp(boot) < last),
     }
     working = system[system["working"]]
     conservative_demand = working["app_mb"] + working["wired_mb"] + working["compressor_stored_mb"]

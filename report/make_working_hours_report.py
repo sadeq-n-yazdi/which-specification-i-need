@@ -1,6 +1,6 @@
 """Build the working-hours-only memory and SSD report: Mon-Fri 08:30-17:30 (local time), nothing else.
 
-Run: uv run --with pandas --with matplotlib python report/make_working_hours_report.py [--no-pdf]
+Run: uv run --with pandas --with matplotlib python report/make_working_hours_report.py [--no-pdf] [--from] [--to]
 Reads logs/ only. Writes report/working-hours/{charts/*.png, statistics.json, memory-report-working-hours.md/.pdf}.
 Reuses helpers from make_charts.py and make_report.py; the all-hours reports are not touched.
 """
@@ -136,12 +136,21 @@ def day_panels(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-pdf", action="store_true", help="only write the Markdown file")
+    parser.add_argument("--from", dest="start", help="first day to include, YYYY-MM-DD")
+    parser.add_argument("--to", dest="end", help="last day to include, YYYY-MM-DD")
     arguments = parser.parse_args()
     CHART_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
     system = read_logs("system")
     processes = read_logs("processes")
     events = pd.read_csv(LOG_DIRECTORY / "events.csv", parse_dates=["timestamp"])
+    # Events stay complete: the start before the period gives each sample its boot time.
+    if arguments.start:
+        system, processes = (frame[frame["timestamp"] >= arguments.start] for frame in (system, processes))
+    if arguments.end:
+        end = pd.Timestamp(arguments.end) + pd.Timedelta(days=1)
+        system, processes = (frame[frame["timestamp"] < end] for frame in (system, processes))
+    system = system.reset_index(drop=True)
     page_size = page_size_bytes()
     physical_mb = int(system["physical_mb"].iloc[-1])
 
@@ -332,12 +341,16 @@ def main() -> None:
             "mean_swap_written_gb_per_day": round(mean_written_per_day, 1),
             "boot_periods": boot_periods,
             "since_boot_boot_time": boot.isoformat(),
+        },
+    }
+    # The SSD counter resets at boot; it can only be compared with the logs when samples exist since that boot.
+    if len(since_boot):
+        statistics["ssd"] |= {
             "since_boot_swap_written_gb": round(swap_since_boot_bytes / GIGABYTE, 1),
             "since_boot_disk_written_gb": round(disk_written_bytes / GIGABYTE, 1),
             "since_boot_swap_share_of_disk_writes_percent": round(swap_since_boot_bytes / disk_written_bytes * 100, 1),
             "since_boot_last_sample": since_boot["timestamp"].max().isoformat(),
-        },
-    }
+        }
     (OUTPUT_DIRECTORY / "statistics.json").write_text(json.dumps(statistics, indent=2, default=str))
 
     # Step 3: charts.
@@ -573,12 +586,25 @@ def build_report(statistics: dict, machine: dict, page_size: int) -> None:
         for moment in statistics["worst_moments"]
     )
     cross_check = (
-        f"Since the last boot ({timestamp_label(ssd['since_boot_boot_time'])}, until the last logged sample "
+        f"The {machine['noun']} was booted on {timestamp_label(ssd['since_boot_boot_time'])}, after the last logged "
+        "sample, so the SSD's own write counter (which resets at boot) cannot be compared with the logs."
+        if "since_boot_last_sample" not in ssd
+        else f"Since the last boot ({timestamp_label(ssd['since_boot_boot_time'])}, until the last logged sample "
         f"{timestamp_label(ssd['since_boot_last_sample'])}) the logs record **{ssd['since_boot_swap_written_gb'] / 1024:.2f} TB "
         f"written to swap**, while the SSD's own counter (`ioreg`, “Bytes (Write)”, read when this report was generated) "
         f"shows **{ssd['since_boot_disk_written_gb'] / 1024:.2f} TB written in total**. Swap is therefore "
         f"**{percent(ssd['since_boot_swap_share_of_disk_writes_percent'])}** of everything written to the disk since boot "
         "(all hours, not only working hours; the two readings differ by the minutes between the last sample and now)."
+    )
+    swap_share_text = (
+        f"; swap is {percent(ssd['since_boot_swap_share_of_disk_writes_percent'])} of all disk writes since the last boot"
+        if "since_boot_swap_share_of_disk_writes_percent" in ssd
+        else ""
+    )
+    reboot_split_text = (
+        f", with {heavy_days} very heavy days before the reboots and about {later_mean:,.0f} GB per day since the last boot"
+        if len(boot_periods) > 1
+        else ""
     )
     markdown = f"""# Memory and SSD usage during working hours — {machine["title"]} ({machine["chip_short"]}, {physical_gb} GB)
 
@@ -594,8 +620,7 @@ Evenings, nights and weekends are excluded.*
 - **Swap:** median **{gigabytes(swap["median"])}** on the SSD (95th percentile {gigabytes(swap["p95"])}), against
   {physical_gb} GB installed RAM; median **{gigabytes(traffic["median"])}/min** moved between RAM and SSD.
 - **SSD:** **{mean_per_day:,.0f} GB per working day** written to swap on average (range
-  {lightest_gb:,.0f}–{heaviest_gb:,.0f} GB, with {heavy_days} very heavy days before the reboots and about
-  {later_mean:,.0f} GB per day since the last boot); swap is {percent(ssd["since_boot_swap_share_of_disk_writes_percent"])} of all disk writes since the last boot.
+  {lightest_gb:,.0f}–{heaviest_gb:,.0f} GB{reboot_split_text}){swap_share_text}.
 - **Estimated memory need:** **{gigabytes(conservative["p95"])}** (conservative, 95th percentile) to
   about **{gigabytes(upper["p95"])}** (upper estimate). Conclusion: **{minimum_gb} GB is the minimum**; {covering_gb} GB
   covers the upper estimate.
